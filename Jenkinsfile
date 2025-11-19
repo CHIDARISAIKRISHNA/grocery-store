@@ -44,9 +44,9 @@ pipeline {
                 dir('frontend') {
                     echo 'Running frontend tests...'
                     script {
-                        sh """
+                        sh '''
                             docker run --rm ${FRONTEND_IMAGE} npm test -- --watchAll=false || true
-                        """
+                        '''
                     }
                 }
             }
@@ -57,9 +57,9 @@ pipeline {
                 dir('backend') {
                     echo 'Running backend tests...'
                     script {
-                        sh """
+                        sh '''
                             docker run --rm ${BACKEND_IMAGE} npm test || true
-                        """
+                        '''
                     }
                 }
             }
@@ -70,9 +70,11 @@ pipeline {
                 echo 'Pushing Docker images to Docker Hub...'
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-                        sh "docker push ${FRONTEND_IMAGE}"
-                        sh "docker push ${BACKEND_IMAGE}"
+                        sh '''
+                            echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                            docker push ${FRONTEND_IMAGE}
+                            docker push ${BACKEND_IMAGE}
+                        '''
                     }
                 }
             }
@@ -82,7 +84,7 @@ pipeline {
             steps {
                 echo 'Deploying to Kubernetes...'
                 script {
-                    sh """
+                    sh '''
                         # Replace placeholders in manifests
                         sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/backend-deployment.yaml
                         sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/frontend-deployment.yaml
@@ -101,7 +103,7 @@ pipeline {
                         # Wait for rollouts
                         kubectl rollout status deployment/backend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
                         kubectl rollout status deployment/frontend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
-                    """
+                    '''
                 }
             }
         }
@@ -110,17 +112,17 @@ pipeline {
             steps {
                 echo 'Performing health checks...'
                 script {
-                    sh """
+                    sh '''
                         sleep 10
                         BACKEND_IP=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
                         FRONTEND_IP=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
                         
-                        echo "Checking backend health at http://${BACKEND_IP}:5000/health"
-                        curl -f http://${BACKEND_IP}:5000/health || exit 1
+                        echo "Checking backend health at http://\$BACKEND_IP:5000/health"
+                        curl -f http://\$BACKEND_IP:5000/health || exit 1
 
-                        echo "Checking frontend health at http://${FRONTEND_IP}:3000"
-                        curl -f http://${FRONTEND_IP}:3000 || exit 1
-                    """
+                        echo "Checking frontend health at http://\$FRONTEND_IP:3000"
+                        curl -f http://\$FRONTEND_IP:3000 || exit 1
+                    '''
                 }
             }
         }
