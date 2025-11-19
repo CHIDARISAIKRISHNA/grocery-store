@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'docker.io/saikrishna2004'
+        DOCKER_REGISTRY = 'docker.io/saikrishna2004' // e.g., 'docker.io/yourusername' or 'your-registry.com'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FRONTEND_IMAGE = "${DOCKER_REGISTRY}/grocery-store-frontend:${IMAGE_TAG}"
         BACKEND_IMAGE = "${DOCKER_REGISTRY}/grocery-store-backend:${IMAGE_TAG}"
@@ -22,7 +22,9 @@ pipeline {
                 dir('frontend') {
                     echo 'Building frontend Docker image...'
                     script {
-                        docker.build("${FRONTEND_IMAGE}")
+                        sh """
+                            docker build -t ${FRONTEND_IMAGE} --build-arg REACT_APP_API_URL=http://localhost:5000/api .
+                        """
                     }
                 }
             }
@@ -33,7 +35,9 @@ pipeline {
                 dir('backend') {
                     echo 'Building backend Docker image...'
                     script {
-                        docker.build("${BACKEND_IMAGE}")
+                        sh """
+                            docker build -t ${BACKEND_IMAGE} .
+                        """
                     }
                 }
             }
@@ -67,14 +71,12 @@ pipeline {
 
         stage('Push Images') {
             steps {
-                echo 'Pushing Docker images to Docker Hub...'
+                echo 'Pushing Docker images to registry...'
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh '''
-                            echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
-                            docker push ${FRONTEND_IMAGE}
-                            docker push ${BACKEND_IMAGE}
-                        '''
+                    withCredentials([usernamePassword(credentialsId: 'docker-registry-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin ${DOCKER_REGISTRY}"
+                        sh "docker push ${FRONTEND_IMAGE}"
+                        sh "docker push ${BACKEND_IMAGE}"
                     }
                 }
             }
@@ -85,11 +87,11 @@ pipeline {
                 echo 'Deploying to Kubernetes...'
                 script {
                     sh '''
-                        # Replace placeholders in manifests
-                        sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/backend-deployment.yaml
-                        sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/frontend-deployment.yaml
+                        # Update image tags in Kubernetes manifests
                         sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/backend-deployment.yaml
                         sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/frontend-deployment.yaml
+                        sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/backend-deployment.yaml
+                        sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/frontend-deployment.yaml
 
                         # Apply Kubernetes manifests
                         kubectl apply -f k8s/namespace.yaml
@@ -100,7 +102,7 @@ pipeline {
                         kubectl apply -f k8s/frontend-service.yaml
                         kubectl apply -f k8s/ingress.yaml
 
-                        # Wait for rollouts
+                        # Wait for deployments to be ready
                         kubectl rollout status deployment/backend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
                         kubectl rollout status deployment/frontend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
                     '''
@@ -113,15 +115,22 @@ pipeline {
                 echo 'Performing health checks...'
                 script {
                     sh '''
+                        # Wait a bit for services to be fully up
                         sleep 10
-                        BACKEND_IP=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
-                        FRONTEND_IP=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
-                        
-                        echo "Checking backend health at http://\$BACKEND_IP:5000/health"
-                        curl -f http://\$BACKEND_IP:5000/health || exit 1
 
-                        echo "Checking frontend health at http://\$FRONTEND_IP:3000"
-                        curl -f http://\$FRONTEND_IP:3000 || exit 1
+                        # Check backend health
+                        BACKEND_URL=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                        if [ -z "$BACKEND_URL" ]; then
+                            BACKEND_URL=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
+                        fi
+                        curl -f http://${BACKEND_URL}:5000/health || exit 1
+
+                        # Check frontend
+                        FRONTEND_URL=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                        if [ -z "$FRONTEND_URL" ]; then
+                            FRONTEND_URL=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
+                        fi
+                        curl -f http://${FRONTEND_URL}:3000 || exit 1
                     '''
                 }
             }
@@ -131,12 +140,16 @@ pipeline {
     post {
         success {
             echo 'Pipeline completed successfully!'
+            // Optional: Send notifications (Slack, Email, etc.)
         }
         failure {
             echo 'Pipeline failed!'
+            // Optional: Send failure notifications
         }
         always {
-            sh 'docker system prune -f || true'
+            // Cleanup
+            sh 'docker system prune -f'
         }
     }
 }
+
