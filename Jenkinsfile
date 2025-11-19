@@ -122,19 +122,6 @@ pipeline {
             }
         }
 
-        /* ✅ NEW STAGE ADDED — Only this */
-        stage('Check Kubernetes Services') {
-            steps {
-                echo "Listing services in namespace: ${KUBERNETES_NAMESPACE}"
-                script {
-                    sh """
-                        kubectl get svc -n ${KUBERNETES_NAMESPACE}
-                    """
-                }
-            }
-        }
-        /* END OF NEW STAGE */
-
     }
 
     post {
