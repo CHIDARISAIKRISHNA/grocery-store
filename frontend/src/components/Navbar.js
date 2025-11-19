@@ -25,13 +25,28 @@ const Navbar = () => {
 
   const cartItemCount = cartItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
-  return (
-    <AppBar position="sticky" elevation={2}>
-      <Toolbar>
-        <StoreIcon sx={{ mr: 2 }} />
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Grocery Store
-        </Typography>
+      return (
+        <AppBar 
+          position="sticky" 
+          elevation={2}
+          sx={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+          }}
+        >
+          <Toolbar>
+            <StoreIcon sx={{ mr: 2, fontSize: 32 }} />
+            <Typography 
+              variant="h6" 
+              component="div" 
+              sx={{ 
+                flexGrow: 1,
+                fontWeight: 700,
+                fontSize: '1.5rem'
+              }}
+            >
+              Grocery Store
+            </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             color="inherit"
