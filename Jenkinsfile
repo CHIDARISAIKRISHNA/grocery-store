@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'docker.io/saikrishna2004' // e.g., 'docker.io/yourusername' or 'your-registry.com'
+        DOCKER_REGISTRY = 'docker.io/saikrishna2004'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FRONTEND_IMAGE = "${DOCKER_REGISTRY}/grocery-store-frontend:${IMAGE_TAG}"
         BACKEND_IMAGE = "${DOCKER_REGISTRY}/grocery-store-backend:${IMAGE_TAG}"
@@ -69,8 +69,8 @@ pipeline {
             steps {
                 echo 'Pushing Docker images to registry...'
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'docker-registry-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin ${DOCKER_REGISTRY}"
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
                         sh "docker push ${FRONTEND_IMAGE}"
                         sh "docker push ${BACKEND_IMAGE}"
                     }
@@ -111,17 +111,14 @@ pipeline {
                 echo 'Performing health checks...'
                 script {
                     sh '''
-                        # Wait a bit for services to be fully up
                         sleep 10
 
-                        # Check backend health
                         BACKEND_URL=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
                         if [ -z "$BACKEND_URL" ]; then
                             BACKEND_URL=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
                         fi
                         curl -f http://${BACKEND_URL}:5000/health || exit 1
 
-                        # Check frontend
                         FRONTEND_URL=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
                         if [ -z "$FRONTEND_URL" ]; then
                             FRONTEND_URL=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
@@ -136,16 +133,12 @@ pipeline {
     post {
         success {
             echo 'Pipeline completed successfully!'
-            // Optional: Send notifications (Slack, Email, etc.)
         }
         failure {
             echo 'Pipeline failed!'
-            // Optional: Send failure notifications
         }
         always {
-            // Cleanup
             sh 'docker system prune -f'
         }
     }
 }
-
