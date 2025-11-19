@@ -2,10 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'docker.io/saikrishna2004' // e.g., 'docker.io/yourusername' or 'your-registry.com'
+        DOCKER_REGISTRY = 'docker.io'
+        DOCKER_USERNAME = 'saikrishna2004'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        FRONTEND_IMAGE = "${DOCKER_REGISTRY}/grocery-store-frontend:${IMAGE_TAG}"
-        BACKEND_IMAGE = "${DOCKER_REGISTRY}/grocery-store-backend:${IMAGE_TAG}"
+        FRONTEND_IMAGE = "${DOCKER_USERNAME}/grocery-store-frontend:${IMAGE_TAG}"
+        BACKEND_IMAGE = "${DOCKER_USERNAME}/grocery-store-backend:${IMAGE_TAG}"
         KUBERNETES_NAMESPACE = 'grocery-store'
     }
 
@@ -78,9 +79,13 @@ pipeline {
                 echo 'Pushing Docker images to registry...'
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-                        sh "docker push ${FRONTEND_IMAGE}"
-                        sh "docker push ${BACKEND_IMAGE}"
+                        sh """
+                            echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                            docker push ${FRONTEND_IMAGE}
+                            docker push ${DOCKER_USERNAME}/grocery-store-frontend:latest
+                            docker push ${BACKEND_IMAGE}
+                            docker push ${DOCKER_USERNAME}/grocery-store-backend:latest
+                        """
                     }
                 }
             }
@@ -90,12 +95,12 @@ pipeline {
             steps {
                 echo 'Deploying to Kubernetes...'
                 script {
-                    sh '''
+                    sh """
                         # Update image tags in Kubernetes manifests
-                        sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/backend-deployment.yaml
-                        sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/frontend-deployment.yaml
-                        sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/backend-deployment.yaml
-                        sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/frontend-deployment.yaml
+                        sed -i 's|IMAGE_TAG|${IMAGE_TAG}|g' k8s/backend-deployment.yaml
+                        sed -i 's|IMAGE_TAG|${IMAGE_TAG}|g' k8s/frontend-deployment.yaml
+                        sed -i 's|DOCKER_USERNAME|${DOCKER_USERNAME}|g' k8s/backend-deployment.yaml
+                        sed -i 's|DOCKER_USERNAME|${DOCKER_USERNAME}|g' k8s/frontend-deployment.yaml
 
                         # Apply Kubernetes manifests
                         kubectl apply -f k8s/namespace.yaml
@@ -109,7 +114,7 @@ pipeline {
                         # Wait for deployments to be ready
                         kubectl rollout status deployment/backend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
                         kubectl rollout status deployment/frontend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
-                    '''
+                    """
                 }
             }
         }
