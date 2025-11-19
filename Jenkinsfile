@@ -44,9 +44,9 @@ pipeline {
                 dir('frontend') {
                     echo 'Running frontend tests...'
                     script {
-                        sh '''
+                        sh """
                             docker run --rm ${FRONTEND_IMAGE} npm test -- --watchAll=false || true
-                        '''
+                        """
                     }
                 }
             }
@@ -57,9 +57,9 @@ pipeline {
                 dir('backend') {
                     echo 'Running backend tests...'
                     script {
-                        sh '''
+                        sh """
                             docker run --rm ${BACKEND_IMAGE} npm test || true
-                        '''
+                        """
                     }
                 }
             }
@@ -67,7 +67,7 @@ pipeline {
 
         stage('Push Images') {
             steps {
-                echo 'Pushing Docker images to registry...'
+                echo 'Pushing Docker images to Docker Hub...'
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
@@ -82,12 +82,12 @@ pipeline {
             steps {
                 echo 'Deploying to Kubernetes...'
                 script {
-                    sh '''
-                        # Update image tags in Kubernetes manifests
-                        sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/backend-deployment.yaml
-                        sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/frontend-deployment.yaml
+                    sh """
+                        # Replace placeholders in manifests
                         sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/backend-deployment.yaml
                         sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" k8s/frontend-deployment.yaml
+                        sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/backend-deployment.yaml
+                        sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" k8s/frontend-deployment.yaml
 
                         # Apply Kubernetes manifests
                         kubectl apply -f k8s/namespace.yaml
@@ -98,10 +98,10 @@ pipeline {
                         kubectl apply -f k8s/frontend-service.yaml
                         kubectl apply -f k8s/ingress.yaml
 
-                        # Wait for deployments to be ready
+                        # Wait for rollouts
                         kubectl rollout status deployment/backend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
                         kubectl rollout status deployment/frontend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s
-                    '''
+                    """
                 }
             }
         }
@@ -110,21 +110,17 @@ pipeline {
             steps {
                 echo 'Performing health checks...'
                 script {
-                    sh '''
+                    sh """
                         sleep 10
+                        BACKEND_IP=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
+                        FRONTEND_IP=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
+                        
+                        echo "Checking backend health at http://${BACKEND_IP}:5000/health"
+                        curl -f http://${BACKEND_IP}:5000/health || exit 1
 
-                        BACKEND_URL=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                        if [ -z "$BACKEND_URL" ]; then
-                            BACKEND_URL=$(kubectl get service backend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
-                        fi
-                        curl -f http://${BACKEND_URL}:5000/health || exit 1
-
-                        FRONTEND_URL=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                        if [ -z "$FRONTEND_URL" ]; then
-                            FRONTEND_URL=$(kubectl get service frontend-service -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.spec.clusterIP}')
-                        fi
-                        curl -f http://${FRONTEND_URL}:3000 || exit 1
-                    '''
+                        echo "Checking frontend health at http://${FRONTEND_IP}:3000"
+                        curl -f http://${FRONTEND_IP}:3000 || exit 1
+                    """
                 }
             }
         }
