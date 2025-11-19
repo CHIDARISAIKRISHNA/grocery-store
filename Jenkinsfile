@@ -24,6 +24,7 @@ pipeline {
                     script {
                         sh """
                             docker build -t ${FRONTEND_IMAGE} --build-arg REACT_APP_API_URL=http://localhost:5000/api .
+                            docker tag ${FRONTEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-frontend:latest
                         """
                     }
                 }
@@ -37,6 +38,7 @@ pipeline {
                     script {
                         sh """
                             docker build -t ${BACKEND_IMAGE} .
+                            docker tag ${BACKEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-backend:latest
                         """
                     }
                 }
@@ -76,7 +78,7 @@ pipeline {
                 echo 'Pushing Docker images to registry...'
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin ${DOCKER_REGISTRY}"
+                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
                         sh "docker push ${FRONTEND_IMAGE}"
                         sh "docker push ${BACKEND_IMAGE}"
                     }
