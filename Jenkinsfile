@@ -136,7 +136,7 @@ pipeline {
             echo 'Pipeline failed!'
         }
         always {
-            sh 'docker system prune -f'
+            sh 'docker system prune -f || true'
         }
     }
 }
