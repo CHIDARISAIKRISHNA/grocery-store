@@ -18,7 +18,7 @@ spec:
       containers:
       - name: frontend
         image: fullstack-frontend:latest
-        imagePullPolicy: Never
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000
         livenessProbe:
@@ -42,4 +42,5 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
+
 
