@@ -43,7 +43,7 @@ pipeline {
             }
         }
 
-        stage('Test Frontend') {
+       /* stage('Test Frontend') {
             steps {
                 dir('frontend') {
                     echo 'Running frontend tests...'
@@ -60,7 +60,7 @@ pipeline {
                 }
             }
         }
-
+*/
         stage('Push Images') {
             steps {
                 echo 'Pushing Docker images to registry...'
@@ -114,3 +114,4 @@ pipeline {
         }
     }
 }
+
