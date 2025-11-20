@@ -11,6 +11,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 echo 'Checking out code from GitHub...'
@@ -22,12 +23,10 @@ pipeline {
             steps {
                 dir('frontend') {
                     echo 'Building frontend Docker image...'
-                    script {
-                        sh """
-                            docker build -t ${FRONTEND_IMAGE} --build-arg REACT_APP_API_URL=http://localhost:5000/api .
-                            docker tag ${FRONTEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-frontend:latest
-                        """
-                    }
+                    bat """
+                        docker build -t ${FRONTEND_IMAGE} --build-arg REACT_APP_API_URL=http://localhost:5000/api .
+                        docker tag ${FRONTEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-frontend:latest
+                    """
                 }
             }
         }
@@ -36,12 +35,10 @@ pipeline {
             steps {
                 dir('backend') {
                     echo 'Building backend Docker image...'
-                    script {
-                        sh """
-                            docker build -t ${BACKEND_IMAGE} .
-                            docker tag ${BACKEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-backend:latest
-                        """
-                    }
+                    bat """
+                        docker build -t ${BACKEND_IMAGE} .
+                        docker tag ${BACKEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-backend:latest
+                    """
                 }
             }
         }
@@ -50,9 +47,7 @@ pipeline {
             steps {
                 dir('frontend') {
                     echo 'Running frontend tests...'
-                    script {
-                        sh 'echo "Frontend tests skipped - production image doesn\'t contain npm"'
-                    }
+                    bat "echo Frontend tests skipped - production image doesn't contain npm"
                 }
             }
         }
@@ -61,9 +56,7 @@ pipeline {
             steps {
                 dir('backend') {
                     echo 'Running backend tests...'
-                    script {
-                        sh 'echo "Backend tests skipped - production image doesn\'t include jest"'
-                    }
+                    bat "echo Backend tests skipped - production image doesn't include jest"
                 }
             }
         }
@@ -71,16 +64,14 @@ pipeline {
         stage('Push Images') {
             steps {
                 echo 'Pushing Docker images to registry...'
-                script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh """
-                            echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
-                            docker push ${FRONTEND_IMAGE}
-                            docker push ${DOCKER_USERNAME}/grocery-store-frontend:latest
-                            docker push ${BACKEND_IMAGE}
-                            docker push ${DOCKER_USERNAME}/grocery-store-backend:latest
-                        """
-                    }
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    bat """
+                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                        docker push ${FRONTEND_IMAGE}
+                        docker push ${DOCKER_USERNAME}/grocery-store-frontend:latest
+                        docker push ${BACKEND_IMAGE}
+                        docker push ${DOCKER_USERNAME}/grocery-store-backend:latest
+                    """
                 }
             }
         }
@@ -88,37 +79,24 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Deploying to Kubernetes...'
-                script {
-                    sh """
-                        if ! kubectl cluster-info &> /dev/null; then
-                            echo 'WARNING: kubectl is not configured or cluster is not accessible'
-                            echo 'Skipping Kubernetes deployment - configure kubectl in Jenkins to deploy'
-                            exit 0
-                        fi
+                bat """
+                    kubectl version --client || echo kubectl not installed
 
-                        sed -i 's|IMAGE_TAG|${IMAGE_TAG}|g' k8s/backend-deployment.yaml
-                        sed -i 's|IMAGE_TAG|${IMAGE_TAG}|g' k8s/frontend-deployment.yaml
-                        sed -i 's|DOCKER_USERNAME|${DOCKER_USERNAME}|g' k8s/backend-deployment.yaml
-                        sed -i 's|DOCKER_USERNAME|${DOCKER_USERNAME}|g' k8s/frontend-deployment.yaml
+                    if exist k8s\\backend-deployment.yaml (
+                        powershell -Command "(Get-Content k8s/backend-deployment.yaml).replace('IMAGE_TAG','${IMAGE_TAG}').replace('DOCKER_USERNAME','${DOCKER_USERNAME}') | Set-Content k8s/backend-deployment.yaml"
+                    )
+                    if exist k8s\\frontend-deployment.yaml (
+                        powershell -Command "(Get-Content k8s/frontend-deployment.yaml).replace('IMAGE_TAG','${IMAGE_TAG}').replace('DOCKER_USERNAME','${DOCKER_USERNAME}') | Set-Content k8s/frontend-deployment.yaml"
+                    )
 
-                        kubectl apply -f k8s/namespace.yaml --validate=false || echo 'Failed to create namespace'
-                        kubectl apply -f k8s/mongodb-deployment.yaml --validate=false || echo 'Failed to deploy MongoDB'
-                        kubectl apply -f k8s/backend-deployment.yaml --validate=false || echo 'Failed to deploy backend'
-                        kubectl apply -f k8s/frontend-deployment.yaml --validate=false || echo 'Failed to deploy frontend'
-                        kubectl apply -f k8s/backend-service.yaml --validate=false || echo 'Failed to create backend service'
-                        kubectl apply -f k8s/frontend-service.yaml --validate=false || echo 'Failed to create frontend service'
-                        kubectl apply -f k8s/ingress.yaml --validate=false || echo 'Failed to create ingress'
-
-                        if kubectl get deployment backend-deployment -n ${KUBERNETES_NAMESPACE} &> /dev/null; then
-                            kubectl rollout status deployment/backend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s || true
-                        fi
-                        if kubectl get deployment frontend-deployment -n ${KUBERNETES_NAMESPACE} &> /dev/null; then
-                            kubectl rollout status deployment/frontend-deployment -n ${KUBERNETES_NAMESPACE} --timeout=300s || true
-                        fi
-
-                        echo 'Kubernetes deployment completed'
-                    """
-                }
+                    kubectl apply -f k8s\\namespace.yaml || echo Failed to create namespace
+                    kubectl apply -f k8s\\mongodb-deployment.yaml || echo Failed to deploy MongoDB
+                    kubectl apply -f k8s\\backend-deployment.yaml || echo Failed to deploy backend
+                    kubectl apply -f k8s\\frontend-deployment.yaml || echo Failed to deploy frontend
+                    kubectl apply -f k8s\\backend-service.yaml || echo Failed to create backend service
+                    kubectl apply -f k8s\\frontend-service.yaml || echo Failed to create frontend service
+                    kubectl apply -f k8s\\ingress.yaml || echo Failed to create ingress
+                """
             }
         }
 
@@ -132,7 +110,7 @@ pipeline {
             echo 'Pipeline failed!'
         }
         always {
-            sh 'if command -v docker &> /dev/null; then docker system prune -f || true; fi'
+            bat 'docker system prune -f || exit 0'
         }
     }
 }
