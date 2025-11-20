@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: fullstack-frontend:latest
+        image: saikrishna2004/grocery-store-frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
@@ -42,5 +42,6 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
+
 
 
