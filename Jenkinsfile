@@ -12,6 +12,7 @@ pipeline {
 
     stages {
 
+        /* ----------------------- CHECKOUT ----------------------- */
         stage('Checkout') {
             steps {
                 echo 'Checking out code from GitHub...'
@@ -19,6 +20,37 @@ pipeline {
             }
         }
 
+        /* ----------------------- BACKEND TEST ----------------------- */
+        stage('Backend Test') {
+            steps {
+                dir('backend') {
+                    echo 'Running Backend Tests...'
+                    bat """
+                        node -v
+                        npm -v
+                        npm ci
+                        npm test
+                    """
+                }
+            }
+        }
+
+        /* ----------------------- FRONTEND TEST ----------------------- */
+        stage('Frontend Test') {
+            steps {
+                dir('frontend') {
+                    echo 'Running Frontend Tests...'
+                    bat """
+                        node -v
+                        npm -v
+                        npm ci
+                        set CI=true && npm test
+                    """
+                }
+            }
+        }
+
+        /* ----------------------- BUILD FRONTEND ----------------------- */
         stage('Build Frontend') {
             steps {
                 dir('frontend') {
@@ -31,6 +63,7 @@ pipeline {
             }
         }
 
+        /* ----------------------- BUILD BACKEND ----------------------- */
         stage('Build Backend') {
             steps {
                 dir('backend') {
@@ -43,32 +76,17 @@ pipeline {
             }
         }
 
-       /* stage('Test Frontend') {
-            steps {
-                dir('frontend') {
-                    echo 'Running frontend tests...'
-                    bat "echo Frontend tests skipped - production image doesn't contain npm"
-                }
-            }
-        }
-
-        stage('Test Backend') {
-            steps {
-                dir('backend') {
-                    echo 'Running backend tests...'
-                    bat "echo Backend tests skipped - production image doesn't include jest"
-                }
-            }
-        }
-*/
+        /* ----------------------- PUSH IMAGES ----------------------- */
         stage('Push Images') {
             steps {
                 echo 'Pushing Docker images to registry...'
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     bat """
                         echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+
                         docker push ${FRONTEND_IMAGE}
                         docker push ${DOCKER_USERNAME}/grocery-store-frontend:latest
+
                         docker push ${BACKEND_IMAGE}
                         docker push ${DOCKER_USERNAME}/grocery-store-backend:latest
                     """
@@ -76,6 +94,7 @@ pipeline {
             }
         }
 
+        /* ----------------------- DEPLOY TO KUBERNETES ----------------------- */
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Deploying to Kubernetes...'
@@ -102,6 +121,7 @@ pipeline {
 
     }
 
+    /* ----------------------- POST ACTIONS ----------------------- */
     post {
         success {
             echo 'Pipeline completed successfully!'
@@ -114,4 +134,3 @@ pipeline {
         }
     }
 }
-
