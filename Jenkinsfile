@@ -20,7 +20,35 @@ pipeline {
             }
         }
 
-        /* ----------------------- BACKEND TEST ----------------------- */
+
+
+        /* ----------------------- BUILD FRONTEND ----------------------- */
+        stage('Build Frontend') {
+            steps {
+                dir('frontend') {
+                    echo 'Building frontend Docker image...'
+                    bat """
+                        docker build -t ${FRONTEND_IMAGE} --build-arg REACT_APP_API_URL=http://localhost:5000/api .
+                        docker tag ${FRONTEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-frontend:latest
+                    """
+                }
+            }
+        }
+
+        /* ----------------------- BUILD BACKEND ----------------------- */
+        stage('Build Backend') {
+            steps {
+                dir('backend') {
+                    echo 'Building backend Docker image...'
+                    bat """
+                        docker build -t ${BACKEND_IMAGE} .
+                        docker tag ${BACKEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-backend:latest
+                    """
+                }
+            }
+        }
+
+         /* ----------------------- BACKEND TEST ----------------------- */
         stage('Backend Test') {
             steps {
                 dir('backend') {
@@ -49,33 +77,6 @@ pipeline {
                 }
             }
         }
-
-        /* ----------------------- BUILD FRONTEND ----------------------- */
-        stage('Build Frontend') {
-            steps {
-                dir('frontend') {
-                    echo 'Building frontend Docker image...'
-                    bat """
-                        docker build -t ${FRONTEND_IMAGE} --build-arg REACT_APP_API_URL=http://localhost:5000/api .
-                        docker tag ${FRONTEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-frontend:latest
-                    """
-                }
-            }
-        }
-
-        /* ----------------------- BUILD BACKEND ----------------------- */
-        stage('Build Backend') {
-            steps {
-                dir('backend') {
-                    echo 'Building backend Docker image...'
-                    bat """
-                        docker build -t ${BACKEND_IMAGE} .
-                        docker tag ${BACKEND_IMAGE} ${DOCKER_USERNAME}/grocery-store-backend:latest
-                    """
-                }
-            }
-        }
-
         /* ----------------------- PUSH IMAGES ----------------------- */
         stage('Push Images') {
             steps {
@@ -134,3 +135,4 @@ pipeline {
         }
     }
 }
+
